@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Thông báo{% endblock %}
+{% block content %}
+<h2 class="mb-3">Thông báo {% if unread_count %}<span class="badge bg-danger fs-6">{{ unread_count }} chưa đọc</span>{%
+    endif %}</h2>
+<div class="list-group">
+    {% for item in notifications %}
+    <div
+        class="list-group-item d-flex justify-content-between align-items-center gap-3 {% if not item.isRead %}list-group-item-primary{% endif %}">
+        <div>
+            <a href="{{ url_for('post_detail', post_id=item.postId) }}#comment-{{ item.commentId }}">
+                {{ item.message }}
+            </a>
+            <div class="text-muted small">{{ item.createdAt[:16].replace('T', ' ') }}</div>
+        </div>
+        {% if not item.isRead %}
+        <form action="{{ url_for('notification_read', notification_id=item.id) }}" method="post">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-primary btn-sm">Đánh dấu đã đọc</button>
+        </form>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="list-group-item text-muted">Chưa có thông báo.</div>
+    {% endfor %}
+</div>
+<nav class="mt-3 d-flex gap-3">
+    {% if page > 1 %}<a href="{{ url_for('notifications', page=page-1) }}">Trang trước</a>{% endif %}
+    {% if has_next %}<a href="{{ url_for('notifications', page=page+1) }}">Trang sau</a>{% endif %}
+</nav>
+{% endblock %}

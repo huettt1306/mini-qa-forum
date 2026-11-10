@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ space_name }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Trang chủ</a></li>
+        <li class="breadcrumb-item active">{{ space_name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="fw-bold mb-0 text-dark">{{ space_name }}</h3>
+    <button class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#newPostForm">
+        <i class="bi bi-plus-circle me-1"></i> Đặt Câu Hỏi Mới
+    </button>
+</div>
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-6"><input class="form-control" name="q" value="{{ search }}" placeholder="Tìm trong câu hỏi">
+    </div>
+    <div class="col-md-4">
+        <select class="form-select" name="status">
+            {% for value, label in [('all','Tất cả'), ('unanswered','Chưa có lời giải'), ('resolved','Đã có lời giải'),
+            ('mine','Bài của tôi')] %}
+            <option value="{{ value }}" {% if status==value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-2"><button class="btn btn-outline-primary w-100">Lọc</button></div>
+</form>
+
+<!-- Form đăng câu hỏi dạng Collapse -->
+<div class="collapse mb-4" id="newPostForm">
+    <div class="card card-body shadow-sm border-0">
+        <h5 class="fw-bold text-primary mb-3">Tạo câu hỏi / bài tập thảo luận</h5>
+        <form method="POST">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Tiêu đề thắc mắc</label>
+                <input type="text" name="title" class="form-control"
+                    placeholder="Ví dụ: Cách giải bài 4 trang 52 SGK Toán..." required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Nội dung chi tiết</label>
+                <textarea name="content" rows="4" class="form-control"
+                    placeholder="Mô tả cụ thể thắc mắc hoặc đề bài..." required></textarea>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="collapse"
+                    data-bs-target="#newPostForm">Hủy</button>
+                <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-send me-1"></i>Đăng bài</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Danh sách các bài viết -->
+<div class="row">
+    <div class="col-12">
+        {% for post in posts %}
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <h5 class="card-title fw-bold">
+                        <a href="/post/{{ post._id }}" class="text-decoration-none text-dark hover-primary">{{
+                            post.title }}</a>
+                    </h5>
+                    {% if post.correctCommentIds and post.correctCommentIds|length > 0 %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Đã có lời giải đúng</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Chưa có lời giải đúng</span>
+                    {% endif %}
+                </div>
+                <p class="card-text text-secondary text-truncate mt-2">{{ post.content }}</p>
+                <div class="d-flex justify-content-between align-items-center pt-2 border-top small text-muted">
+                    <span>
+                        <i class="bi bi-person me-1"></i>{{ post.author.fullName }} ({{ post.author.role }})
+                        &bull; <i class="bi bi-clock me-1"></i>{{ post.createdAt.strftime('%d/%m/%Y %H:%M') if
+                        post.createdAt else '' }}
+                    </span>
+                    <a href="/post/{{ post._id }}" class="text-decoration-none fw-semibold">
+                        <i class="bi bi-chat-dots me-1"></i>{{ post.commentCount }} câu trả lời
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="card p-5 text-center text-muted border-0 shadow-sm">
+            <i class="bi bi-chat-square-dots display-4 mb-3 text-secondary"></i>
+            <p>Chưa có câu hỏi nào trong không gian này. Hãy là người đầu tiên đặt câu hỏi!</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+<nav class="d-flex justify-content-between my-3">
+    {% if page > 1 %}<a
+        href="{{ url_for('space_detail', space_type=space_type, space_id=space_id, page=page-1, q=search, status=status) }}">←
+        Trang trước</a>{% else %}<span></span>{% endif %}
+    {% if has_next %}<a
+        href="{{ url_for('space_detail', space_type=space_type, space_id=space_id, page=page+1, q=search, status=status) }}">Trang
+        sau →</a>{% endif %}
+</nav>
+{% endblock %}

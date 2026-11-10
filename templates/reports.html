@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Báo cáo học tập{% endblock %}
+{% block content %}
+<h2>Báo cáo học tập</h2>
+<form method="get" class="row g-2 mb-4">
+    <div class="col-md-8"><select class="form-select" name="space">
+            {% for kind, item in spaces %}
+            <option value="{{ kind }}:{{ item._id }}" {% if selected_type==kind and selected_id==item._id|string
+                %}selected{% endif %}>
+                {{ item.subjectName if kind == 'SUBJECT_CLASS' else item.title }}{% if kind == 'SUBJECT_CLASS' %} — {{
+                item.targetClass }}{% endif %}
+            </option>{% endfor %}
+        </select></div>
+    <div class="col-md-4"><button class="btn btn-primary">Xem báo cáo</button></div>
+</form>
+<p>Tổng: {{ rows|length }} học sinh có hoạt động trong không gian đã chọn.</p>
+<p>Bài hỏi: {{ rows|sum(attribute='posts') }} · Bài đã giải quyết: {{ rows|sum(attribute='resolvedPosts') }} · Phản hồi:
+    {{ rows|sum(attribute='comments') }} · Phản hồi đúng: {{ rows|sum(attribute='correctComments') }}</p>
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Tài khoản</th>
+                <th>Học sinh</th>
+                <th>Bài hỏi</th>
+                <th>Bài đã giải quyết</th>
+                <th>Phản hồi</th>
+                <th>Phản hồi đúng</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}<tr>
+                <td>{{ row.username }}</td>
+                <td>{{ row.name }}</td>
+                <td>{{ row.posts }}</td>
+                <td>{{ row.resolvedPosts }}</td>
+                <td>{{ row.comments }}</td>
+                <td>{{ row.correctComments }}</td>
+            </tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

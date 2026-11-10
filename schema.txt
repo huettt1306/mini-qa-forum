@@ -1,0 +1,71 @@
+KIẾN TRÚC DỮ LIỆU MONGODB HIỆN TẠI
+
+Database: school_forum (api/db.py). Các collection được seed.py tạo lại sau khi
+xóa toàn bộ collection cũ; ensure_indexes.py tạo index riêng sau khi seed.
+Mọi _id và trường tham chiếu ID dưới đây là ObjectId; createdAt là BSON Date.
+Không có collection images và không có trường imageId.
+
+1. users
+   _id, username (string, duy nhất), password (bcrypt hash), fullName (string),
+   role (ADMIN | TEACHER | STUDENT), class (string hoặc null), createdAt.
+   Giáo viên có thêm subject (string, ví dụ "Tiếng Anh"). Học sinh có class
+   là mã lớp hành chính, ví dụ "10A1". Admin có class = null.
+   Index: username ASC, unique.
+
+2. subject_classes
+   _id, subjectName (string, tên môn kèm khối, ví dụ "Tiếng Anh 10"),
+   targetClass (string, mã lớp hành chính), teacherId -> users._id,
+   teacherName (string, tên giáo viên được lưu kèm).
+   Index: (targetClass ASC, subjectName ASC) unique; teacherId ASC.
+   Hiện không có trường subject riêng; logic phân công lấy tên môn bằng cách
+   bỏ từ cuối trong subjectName (khối lớp).
+
+3. topics
+   _id, title, description (string), teacherId -> users._id,
+   teacherName (string), createdAt.
+   Chủ đề mở cho mọi người dùng đã đăng nhập. Chưa có index ngoài _id mặc định.
+
+4. posts
+   _id, title, content (string),
+   author: {userId -> users._id, fullName, role},
+   spaceType (SUBJECT_CLASS | TOPIC),
+   spaceId -> subject_classes._id hoặc topics._id tùy spaceType,
+   commentCount (int, bắt đầu 0, tăng bằng $inc khi thêm phản hồi),
+   correctCommentIds (mảng ObjectId -> comments._id), createdAt.
+   Index: (spaceId ASC, spaceType ASC, createdAt DESC, _id DESC);
+          (spaceId ASC, author.userId ASC).
+   Danh sách bài viết sắp xếp createdAt DESC, _id DESC và phân trang 10 bài.
+
+5. comments
+   _id, postId -> posts._id, spaceId -> không gian của bài viết,
+   author: {userId -> users._id, fullName, role},
+   content (string), isCorrect (bool), createdAt.
+   Index: (postId ASC, isCorrect DESC, createdAt ASC);
+          (spaceId ASC, author.userId ASC).
+   Phản hồi mới có isCorrect = false. Giáo viên phụ trách thay đổi trạng thái
+   duyệt; ID phản hồi đúng được thêm/xóa trong posts.correctCommentIds.
+
+6. notifications
+   _id, recipientId -> users._id, actorId -> users._id,
+   type (NEW_COMMENT | ANSWER_APPROVED), message (string),
+   postId -> posts._id, commentId -> comments._id,
+   spaceId -> subject_classes._id hoặc topics._id tùy spaceType,
+   spaceType (SUBJECT_CLASS | TOPIC), createdAt, isRead (bool).
+   NEW_COMMENT gửi tới tác giả bài viết nếu người phản hồi khác tác giả.
+   ANSWER_APPROVED gửi tới tác giả phản hồi nếu người duyệt khác tác giả;
+   khi hủy duyệt, chỉ thông báo ANSWER_APPROVED tương ứng bị xóa.
+   Index: (recipientId ASC, createdAt DESC, _id DESC);
+          (recipientId ASC, isRead ASC);
+          (type ASC, commentId ASC, recipientId ASC) unique.
+   Danh sách thông báo lọc theo recipientId và phân trang 20 mục; số chưa đọc
+   đếm theo recipientId + isRead=false. Đánh dấu đã đọc chỉ cập nhật bản ghi
+   của chính recipientId.
+
+RÀNG BUỘC VÀ CẬP NHẬT
+   - MongoDB không tự áp khóa ngoại; ứng dụng kiểm tra quyền và quan hệ trước
+     các thao tác. author và teacherName là dữ liệu sao chép để hiển thị.
+   - Tạo phản hồi, tăng posts.commentCount và tạo NEW_COMMENT cùng transaction.
+   - Duyệt/hủy duyệt cập nhật comments.isCorrect, posts.correctCommentIds và
+     tạo/xóa ANSWER_APPROVED cùng transaction.
+   - Seed hiện tạo 1.571 users, 210 subject_classes, 5 topics, 1.000 posts,
+     4.000 comments và 4.400 notifications; không tạo ảnh.

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Quản trị{% endblock %}
+{% block content %}
+<h2>Quản trị diễn đàn</h2>
+<div class="row g-2 mb-4">
+    {% for label, key in [('Tài khoản','users'),('Giáo viên','teachers'),('Học sinh','students'),('Lớp
+    môn','classes'),('Chủ đề','topics'),('Bài viết','posts'),('Phản hồi','comments')] %}
+    <div class="col-auto"><span class="badge bg-primary p-2">{{ label }}: {{ summary[key] }}</span></div>
+    {% endfor %}
+</div>
+<h3>Tạo chủ đề mở</h3>
+<form method="post" action="{{ url_for('admin_create_topic') }}" class="mb-4">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input class="form-control mb-2" name="title" placeholder="Tên chủ đề" required>
+    <textarea class="form-control mb-2" name="description" placeholder="Mô tả" required></textarea>
+    <select class="form-select mb-2" name="teacher_id" required>
+        <option value="">Chọn giáo viên phụ trách</option>
+        {% for teacher in teachers %}<option value="{{ teacher._id }}">{{ teacher.fullName }} — {{ teacher.subject }}
+        </option>{% endfor %}
+    </select>
+    <button class="btn btn-primary">Tạo chủ đề</button>
+</form>
+<h3>Phân công lớp môn</h3>
+<div class="table-responsive">
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Lớp môn</th>
+                <th>Lớp</th>
+                <th>Giáo viên</th>
+                <th>Đổi</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in classes %}
+            <tr>
+                <td>{{ item.subjectName }}</td>
+                <td>{{ item.targetClass }}</td>
+                <td>{{ item.teacherName }}</td>
+                <td>
+                    <form method="post"
+                        action="{{ url_for('admin_assign', space_type='SUBJECT_CLASS', space_id=item._id) }}"
+                        class="d-flex gap-1">
+                        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                        <select class="form-select form-select-sm" name="teacher_id">
+                            {% for teacher in teachers if teacher.subject == item.subjectName.rsplit(' ', 1)[0] %}
+                            <option value="{{ teacher._id }}" {% if teacher._id==item.teacherId %}selected{% endif %}>{{
+                                teacher.fullName }}</option>
+                            {% endfor %}
+                        </select><button class="btn btn-sm btn-outline-primary">Lưu</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<h3>Chủ đề mở</h3>
+{% for item in topics %}
+<form method="post" action="{{ url_for('admin_assign', space_type='TOPIC', space_id=item._id) }}" class="row g-2 mb-2">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="col-md-5">{{ item.title }}</div>
+    <div class="col-md-5"><select class="form-select form-select-sm" name="teacher_id">{% for teacher in teachers %}
+            <option value="{{ teacher._id }}" {% if teacher._id==item.teacherId %}selected{% endif %}>{{
+                teacher.fullName }} — {{ teacher.subject }}</option>
+            {% endfor %}
+        </select></div>
+    <div class="col-md-2"><button class="btn btn-sm btn-outline-primary">Lưu</button></div>
+</form>
+{% endfor %}
+{% endblock %}

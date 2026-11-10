@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+{% if g.user.role == 'ADMIN' %}
+<p><a class="btn btn-primary" href="{{ url_for('admin_dashboard') }}">Mở bảng điều khiển quản trị</a></p>
+{% endif %}
+<div class="row g-4">
+    <!-- Cột Lớp môn học -->
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-primary text-white py-3">
+                <h5 class="card-title mb-0 fw-bold">
+                    <i class="bi bi-book me-2"></i>
+                    {% if g.user.role == 'STUDENT' %}Lớp môn của bạn ({{ g.user['class'] }})
+                    {% elif g.user.role == 'TEACHER' %}Lớp môn bạn phụ trách
+                    {% else %}Tất cả lớp môn{% endif %}
+                </h5>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for sub in subject_classes %}
+                <a href="/space/SUBJECT_CLASS/{{ sub._id }}"
+                    class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1 text-primary fw-semibold">{{ sub.subjectName }}</h6>
+                        <span class="text-muted small">
+                            <i class="bi bi-people me-1"></i>Lớp: <strong>{{ sub.targetClass }}</strong> |
+                            <i class="bi bi-person-workspace me-1"></i>GV: {{ sub.teacherName }}
+                        </span>
+                    </div>
+                    <i class="bi bi-chevron-right text-muted"></i>
+                </a>
+                {% else %}
+                <div class="p-4 text-center text-muted">Không có lớp môn học nào phù hợp.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột Chủ đề mở liên lớp -->
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-success text-white py-3">
+                <h5 class="card-title mb-0 fw-bold">
+                    <i class="bi bi-globe me-2"></i>Chủ Đề Mở Toàn Trường
+                </h5>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for topic in topics %}
+                <a href="/space/TOPIC/{{ topic._id }}"
+                    class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1 text-success fw-semibold">{{ topic.title }}</h6>
+                        <p class="text-muted small mb-1">{{ topic.description }}</p>
+                        <span class="text-secondary small"><i class="bi bi-person-fill"></i> Quản lý: {{
+                            topic.teacherName }}</span>
+                    </div>
+                    <i class="bi bi-chevron-right text-muted"></i>
+                </a>
+                {% else %}
+                <div class="p-4 text-center text-muted">Chưa có chủ đề mở nào.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
