@@ -64,7 +64,7 @@
                         <a href="/post/{{ post._id }}" class="text-decoration-none text-dark hover-primary">{{
                             post.title }}</a>
                     </h5>
-                    {% if post.correctCommentIds and post.correctCommentIds|length > 0 %}
+                    {% if post.correctCommentCount > 0 %}
                     <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Đã có lời giải đúng</span>
                     {% else %}
                     <span class="badge bg-secondary">Chưa có lời giải đúng</span>

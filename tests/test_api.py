@@ -22,12 +22,13 @@ class ForumTest(unittest.TestCase):
         self.user = {"_id": self.user_id, "username": "hs00001", "fullName": "Học sinh",
                      "role": "STUDENT", "class": "10A1"}
         self.user_patch = patch.object(store, "get_user", return_value=self.user)
-        self.user_patch.start()
+        self.get_user_mock = self.user_patch.start()
         self.addCleanup(self.user_patch.stop)
 
     def login_as(self, user=None):
         if user is not None:
             self.user = user
+            self.get_user_mock.return_value = user
         with self.client.session_transaction() as current:
             current["user_id"] = str(self.user_id)
             current["_csrf"] = "test-token"
@@ -62,15 +63,12 @@ class ForumTest(unittest.TestCase):
     def test_teacher_cannot_approve_another_teachers_post(self):
         teacher = {**self.user, "role": "TEACHER", "class": None}
         self.login_as(teacher)
-        post = {"_id": self.post_id, "spaceType": "SUBJECT_CLASS", "spaceId": self.space_id}
-        space = {"_id": self.space_id, "teacherId": ObjectId(), "targetClass": "10A1"}
-        with patch.object(store, "get_post", return_value=post), \
-             patch.object(store, "get_space", return_value=space), \
-             patch.object(store, "set_correct") as approve:
+        with patch.object(store, "set_correct",
+                          side_effect=store.PermissionDenied("Bạn không phụ trách")) as approve:
             response = self.client.post(
                 f"/post/{self.post_id}/mark-correct/{ObjectId()}", data={"_csrf": "test-token"})
         self.assertEqual(response.status_code, 403)
-        approve.assert_not_called()
+        self.assertEqual(approve.call_args.args[3], teacher)
 
     def test_post_form_passes_text_to_db(self):
         self.login_as()
@@ -123,6 +121,33 @@ class ForumTest(unittest.TestCase):
                                         data={"_csrf": "test-token"})
         self.assertEqual(response.status_code, 302)
         mark.assert_called_once_with(str(notice_id), self.user_id)
+
+    def test_delete_comment_requires_csrf_and_redirects_after_success(self):
+        comment_id = ObjectId()
+        with patch.object(store, "delete_comment") as delete:
+            response = self.client.post(f"/post/{self.post_id}/comment/{comment_id}/delete")
+            self.assertEqual(response.status_code, 400)
+            delete.assert_not_called()
+
+            self.login_as()
+            response = self.client.post(
+                f"/post/{self.post_id}/comment/{comment_id}/delete",
+                data={"_csrf": "test-token"},
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith(f"/post/{self.post_id}"))
+        delete.assert_called_once_with(str(self.post_id), str(comment_id), self.user)
+
+    def test_delete_post_redirects_to_its_space(self):
+        self.login_as()
+        deleted = {"spaceType": "SUBJECT_CLASS", "spaceId": self.space_id}
+        with patch.object(store, "delete_post", return_value=deleted) as delete:
+            response = self.client.post(
+                f"/post/{self.post_id}/delete", data={"_csrf": "test-token"})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith(
+            f"/space/SUBJECT_CLASS/{self.space_id}"))
+        delete.assert_called_once_with(str(self.post_id), self.user)
 
 
 if __name__ == "__main__":

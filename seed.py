@@ -137,40 +137,28 @@ print(f"   -> Đã lưu 1.500 Học sinh (hs00001 -> hs01500).")
 print("6. Đang phân công giáo viên: Mỗi GV phụ trách đúng 1 lớp 10, 1 lớp 11, 1 lớp 12...")
 subject_classes = []
 
-classes_k10 = [f"10A{i}" for i in range(1, 11)]
-classes_k11 = [f"11A{i}" for i in range(1, 11)]
-classes_k12 = [f"12A{i}" for i in range(1, 11)]
+classes_by_grade = {
+    grade: [f"{grade}A{i}" for i in range(1, 11)]
+    for grade in ("10", "11", "12")
+}
 
 for mon in CORE_SUBJECTS:
     mon_teachers = teachers_by_subject[mon]
     # Trộn ngẫu nhiên danh sách lớp để gán 1-1 với 10 giáo viên
-    rand_k10 = random.sample(classes_k10, 10)
-    rand_k11 = random.sample(classes_k11, 10)
-    rand_k12 = random.sample(classes_k12, 10)
-
-    for i in range(10):
-        t = mon_teachers[i]
-        # Lớp 10
-        subject_classes.append({
-            "subjectName": f"{mon} 10",
-            "targetClass": rand_k10[i],
-            "teacherId": t["_id"],
-            "teacherName": t["fullName"]
-        })
-        # Lớp 11
-        subject_classes.append({
-            "subjectName": f"{mon} 11",
-            "targetClass": rand_k11[i],
-            "teacherId": t["_id"],
-            "teacherName": t["fullName"]
-        })
-        # Lớp 12
-        subject_classes.append({
-            "subjectName": f"{mon} 12",
-            "targetClass": rand_k12[i],
-            "teacherId": t["_id"],
-            "teacherName": t["fullName"]
-        })
+    assigned_classes = {
+        grade: random.sample(classes, 10)
+        for grade, classes in classes_by_grade.items()
+    }
+    for i, teacher in enumerate(mon_teachers):
+        for grade, grade_classes in assigned_classes.items():
+            subject_classes.append({
+                "subject": mon,
+                "grade": grade,
+                "subjectName": f"{mon} {grade}",
+                "targetClass": grade_classes[i],
+                "teacherId": teacher["_id"],
+                "teacherName": teacher["fullName"],
+            })
 
 db.subject_classes.insert_many(subject_classes)
 print(f"   -> Đã khởi tạo {len(subject_classes)} lớp môn học (210 lớp môn).")
@@ -300,7 +288,7 @@ for number, state in enumerate(states, start=1):
     post_id = ObjectId()
     post_time = datetime.utcnow() - timedelta(days=random.randint(1, 30), hours=random.randint(0, 12))
     comment_count = {"unanswered": 0, "discussing": 8, "resolved": 3}[state]
-    correct_ids = []
+    correct_count = int(state == "resolved")
 
     # Chọn người trả lời khác người hỏi; với lớp môn, họ cùng lớp hành chính.
     answerers = random.sample(
@@ -314,8 +302,6 @@ for number, state in enumerate(states, start=1):
     for index, answerer in enumerate(answerers):
         comment_id = ObjectId()
         is_correct = state == "resolved" and index == 0
-        if is_correct:
-            correct_ids.append(comment_id)
         comment_time = post_time + timedelta(minutes=30 * (index + 1))
         comments_to_insert.append({
             "_id": comment_id,
@@ -358,7 +344,7 @@ for number, state in enumerate(states, start=1):
         "spaceType": space_type,
         "spaceId": space["_id"],
         "commentCount": comment_count,
-        "correctCommentIds": correct_ids,
+        "correctCommentCount": correct_count,
         "createdAt": post_time,
     })
 

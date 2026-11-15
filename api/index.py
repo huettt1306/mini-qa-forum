@@ -181,22 +181,46 @@ def post_detail(post_id):
     space = store.get_space(post["spaceType"], post["spaceId"])
     can_moderate = g.user["role"] == "TEACHER" and space["teacherId"] == g.user["_id"]
     comments = store.list_comments(post_id)
+    can_delete_any = can_moderate or g.user["role"] == "ADMIN"
+    can_delete_post = can_delete_any or post["author"]["userId"] == g.user["_id"]
+    deletable_comment_ids = {
+        comment["_id"] for comment in comments
+        if can_delete_any or comment["author"]["userId"] == g.user["_id"]
+    }
     return render_template("post_detail.html", post=post, comments=comments,
-                           can_moderate=can_moderate)
+                           can_moderate=can_moderate, can_delete_post=can_delete_post,
+                           deletable_comment_ids=deletable_comment_ids)
+
+
+@app.route("/post/<post_id>/delete", methods=["POST"])
+def post_delete(post_id):
+    user = require_user()
+    post = store.delete_post(post_id, user)
+    flash("Đã xóa bài viết", "success")
+    return redirect(url_for("space_detail", space_type=post["spaceType"],
+                            space_id=post["spaceId"]))
+
+
+@app.route("/post/<post_id>/comment/<comment_id>/delete", methods=["POST"])
+def comment_delete(post_id, comment_id):
+    user = require_user()
+    store.delete_comment(post_id, comment_id, user)
+    flash("Đã xóa phản hồi", "success")
+    return redirect(url_for("post_detail", post_id=post_id))
 
 
 @app.route("/post/<post_id>/mark-correct/<comment_id>", methods=["POST"])
 def mark_correct(post_id, comment_id):
-    accessible_post(post_id, moderate=True)
-    store.set_correct(post_id, comment_id, True, g.user["_id"])
+    user = require_user()
+    store.set_correct(post_id, comment_id, True, user)
     flash("Đã duyệt đáp án", "success")
     return redirect(url_for("post_detail", post_id=post_id))
 
 
 @app.route("/post/<post_id>/unmark-correct/<comment_id>", methods=["POST"])
 def unmark_correct(post_id, comment_id):
-    accessible_post(post_id, moderate=True)
-    store.set_correct(post_id, comment_id, False, g.user["_id"])
+    user = require_user()
+    store.set_correct(post_id, comment_id, False, user)
     flash("Đã hủy duyệt đáp án", "success")
     return redirect(url_for("post_detail", post_id=post_id))
 
@@ -257,9 +281,8 @@ def admin_assign(space_type, space_id):
 @app.route("/reports")
 def reports():
     require_user("TEACHER")
-    classes, topics = store.list_spaces(g.user)
+    classes, _ = store.list_spaces(g.user)
     owned = [("SUBJECT_CLASS", item) for item in classes]
-    owned += [("TOPIC", item) for item in topics if item["teacherId"] == g.user["_id"]]
     selected = request.args.get("space", "")
     space_type, _, space_id = selected.partition(":")
     rows = store.teacher_report(g.user["_id"], space_type, space_id) if space_type and space_id else []

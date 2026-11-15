@@ -102,7 +102,8 @@ def list_spaces(user):
         query = {"teacherId": user["_id"]}
     else:
         query = {}
-    return list(database.subject_classes.find(query)), list(database.topics.find())
+    topics = database.topics.find().sort([("createdAt", -1), ("_id", -1)])
+    return list(database.subject_classes.find(query)), list(topics)
 
 
 def get_space(space_type, space_id):
@@ -126,6 +127,8 @@ def get_post(post_id):
 
 
 def list_posts(space_type, space_id, search="", status="all", mine=None, page=1):
+    if page < 1:
+        raise InvalidInput("Trang không hợp lệ")
     if status not in {"all", "unanswered", "resolved", "mine"}:
         raise InvalidInput("Bộ lọc không hợp lệ")
     query = {"spaceType": space_type, "spaceId": object_id(space_id)}
@@ -137,10 +140,12 @@ def list_posts(space_type, space_id, search="", status="all", mine=None, page=1)
             {"content": {"$regex": re.escape(search[:100]), "$options": "i"}},
         ]
     if status == "unanswered":
-        query["correctCommentIds"] = {"$size": 0}
+        query["correctCommentCount"] = 0
     elif status == "resolved":
-        query["correctCommentIds.0"] = {"$exists": True}
+        query["correctCommentCount"] = {"$gt": 0}
     elif status == "mine":
+        if not mine:
+            raise InvalidInput("Thiếu thông tin người dùng")
         query["author.userId"] = object_id(mine)
     cursor = database.posts.find(query).sort([("createdAt", -1), ("_id", -1)])
     return list(cursor.skip((page - 1) * POSTS_PER_PAGE).limit(POSTS_PER_PAGE + 1))
@@ -153,18 +158,14 @@ def list_comments(post_id):
 
 def create_post(space_type, space_id, user, title, content):
     space = get_space(space_type, space_id)
-    post_id = ObjectId()
     doc = {
-        "_id": post_id, "title": title, "content": content,
+        "title": title, "content": content,
         "author": {"userId": user["_id"], "fullName": user["fullName"], "role": user["role"]},
         "spaceType": space_type, "spaceId": space["_id"],
-        "commentCount": 0, "correctCommentIds": [],
+        "commentCount": 0, "correctCommentCount": 0,
         "createdAt": datetime.now(timezone.utc),
     }
-    with client.start_session() as session:
-        with session.start_transaction():
-            database.posts.insert_one(doc, session=session)
-    return post_id
+    return database.posts.insert_one(doc).inserted_id
 
 
 def create_comment(post, user, content):
@@ -194,28 +195,106 @@ def create_comment(post, user, content):
     return comment_id
 
 
-def set_correct(post_id, comment_id, correct, actor_id):
-    post = get_post(post_id)
+def _can_moderate_post(post, actor, session=None):
+    if actor["role"] == "ADMIN":
+        return True
+    if actor["role"] != "TEACHER":
+        return False
+    if post["spaceType"] == "SUBJECT_CLASS":
+        collection = database.subject_classes
+    elif post["spaceType"] == "TOPIC":
+        collection = database.topics
+    else:
+        return False
+    return collection.find_one(
+        {"_id": post["spaceId"], "teacherId": actor["_id"]},
+        {"_id": 1},
+        session=session,
+    ) is not None
+
+
+def delete_comment(post_id, comment_id, actor):
+    post_id = object_id(post_id)
     comment_id = object_id(comment_id)
     with client.start_session() as session:
         with session.start_transaction():
+            post = database.posts.find_one({"_id": post_id}, session=session)
+            if not post:
+                raise EntityNotFound("Bài viết không tồn tại")
+            comment = database.comments.find_one(
+                {"_id": comment_id, "postId": post_id}, session=session)
+            if not comment:
+                raise EntityNotFound("Phản hồi không tồn tại")
+            is_author = comment["author"]["userId"] == actor["_id"]
+            if not is_author and not _can_moderate_post(post, actor, session):
+                raise PermissionDenied("Bạn không có quyền xóa phản hồi này")
+
+            deleted = database.comments.delete_one(
+                {"_id": comment_id, "postId": post_id}, session=session)
+            if not deleted.deleted_count:
+                raise ConflictError("Phản hồi đã được xóa trong một phiên khác")
+            post_filter = {"_id": post_id, "commentCount": {"$gt": 0}}
+            decrements = {"commentCount": -1}
+            if comment.get("isCorrect", False):
+                post_filter["correctCommentCount"] = {"$gt": 0}
+                decrements["correctCommentCount"] = -1
+            result = database.posts.update_one(
+                post_filter, {"$inc": decrements}, session=session)
+            if not result.matched_count:
+                raise ConflictError("Số lượng phản hồi không còn nhất quán")
+            database.notifications.delete_many({"commentId": comment_id}, session=session)
+    return post
+
+
+def delete_post(post_id, actor):
+    post_id = object_id(post_id)
+    with client.start_session() as session:
+        with session.start_transaction():
+            post = database.posts.find_one({"_id": post_id}, session=session)
+            if not post:
+                raise EntityNotFound("Bài viết không tồn tại")
+            is_author = post["author"]["userId"] == actor["_id"]
+            if not is_author and not _can_moderate_post(post, actor, session):
+                raise PermissionDenied("Bạn không có quyền xóa bài viết này")
+
+            deleted = database.posts.delete_one({"_id": post_id}, session=session)
+            if not deleted.deleted_count:
+                raise ConflictError("Bài viết đã được xóa trong một phiên khác")
+            database.comments.delete_many({"postId": post_id}, session=session)
+            database.notifications.delete_many({"postId": post_id}, session=session)
+    return post
+
+
+def set_correct(post_id, comment_id, correct, actor):
+    post_id = object_id(post_id)
+    comment_id = object_id(comment_id)
+    with client.start_session() as session:
+        with session.start_transaction():
+            post = database.posts.find_one({"_id": post_id}, session=session)
+            if not post:
+                raise EntityNotFound("Bài viết không tồn tại")
+            if actor["role"] != "TEACHER" or not _can_moderate_post(post, actor, session):
+                raise PermissionDenied("Bạn không phụ trách không gian này")
             comment = database.comments.find_one_and_update(
                 {"_id": comment_id, "postId": post["_id"], "isCorrect": not correct},
                 {"$set": {"isCorrect": correct}}, session=session,
                 return_document=ReturnDocument.AFTER)
             if not comment:
                 raise ConflictError("Phản hồi không thuộc bài hoặc đã ở trạng thái này")
-            update = {"$addToSet": {"correctCommentIds": comment_id}} if correct else {
-                "$pull": {"correctCommentIds": comment_id}}
-            result = database.posts.update_one({"_id": post["_id"]}, update, session=session)
+            post_filter = {"_id": post["_id"]}
+            if not correct:
+                post_filter["correctCommentCount"] = {"$gt": 0}
+            increment = 1 if correct else -1
+            result = database.posts.update_one(
+                post_filter, {"$inc": {"correctCommentCount": increment}}, session=session)
             if not result.matched_count:
-                raise EntityNotFound("Bài viết không còn tồn tại")
+                raise ConflictError("Số đáp án đúng không còn nhất quán")
             notice_query = {"type": "ANSWER_APPROVED", "commentId": comment_id,
                             "recipientId": comment["author"]["userId"]}
-            if correct and comment["author"]["userId"] != object_id(actor_id):
+            if correct and comment["author"]["userId"] != actor["_id"]:
                 database.notifications.insert_one({
                     **notice_query, "message": NOTIFICATION_MESSAGES["ANSWER_APPROVED"],
-                    "actorId": object_id(actor_id),
+                    "actorId": actor["_id"],
                     "postId": post["_id"], "spaceId": post["spaceId"],
                     "spaceType": post["spaceType"],
                     "createdAt": datetime.now(timezone.utc), "isRead": False,
@@ -237,9 +316,8 @@ def list_notifications(user_id, page=1):
 
 def mark_notification_read(notification_id, user_id):
     query = {"_id": object_id(notification_id), "recipientId": object_id(user_id)}
-    result = database.notifications.update_one(
-        {**query, "isRead": False}, {"$set": {"isRead": True}})
-    if not result.matched_count and not database.notifications.find_one(query, {"_id": 1}):
+    result = database.notifications.update_one(query, {"$set": {"isRead": True}})
+    if not result.matched_count:
         raise EntityNotFound("Thông báo không tồn tại")
 
 
@@ -260,7 +338,7 @@ def assign_teacher(space_type, space_id, teacher_id):
     teacher = get_user(teacher_id)
     if teacher["role"] != "TEACHER":
         raise InvalidInput("Người được gán phải là giáo viên")
-    if space_type == "SUBJECT_CLASS" and teacher.get("subject") != space["subjectName"].rsplit(" ", 1)[0]:
+    if space_type == "SUBJECT_CLASS" and teacher.get("subject") != space["subject"]:
         raise InvalidInput("Giáo viên không dạy môn của lớp này")
     collection = database.subject_classes if space_type == "SUBJECT_CLASS" else database.topics
     collection.update_one({"_id": space["_id"]}, {"$set": {
@@ -287,29 +365,59 @@ def admin_summary():
 
 
 def teacher_report(teacher_id, space_type, space_id):
+    if space_type != "SUBJECT_CLASS":
+        raise InvalidInput("Chỉ hỗ trợ báo cáo cho lớp học phần")
     space = get_space(space_type, space_id)
     if space["teacherId"] != object_id(teacher_id):
         raise PermissionDenied("Bạn không phụ trách không gian này")
-    match = {"spaceId": space["_id"]}
-    posts = list(database.posts.aggregate([
-        {"$match": match},
-        {"$group": {"_id": "$author.userId", "posts": {"$sum": 1},
+    pipeline = [
+        {"$match": {"role": "STUDENT", "class": space["targetClass"]}},
+        {"$sort": {"username": 1}},
+        {"$lookup": {
+            "from": "posts",
+            "let": {"uid": "$_id"},
+            "pipeline": [
+                {"$match": {"$expr": {"$and": [
+                    {"$eq": ["$spaceId", space["_id"]]},
+                    {"$eq": ["$spaceType", "SUBJECT_CLASS"]},
+                    {"$eq": ["$author.userId", "$$uid"]},
+                ]}}},
+                {"$group": {
+                    "_id": None,
+                    "posts": {"$sum": 1},
                     "resolvedPosts": {"$sum": {"$cond": [
-                        {"$gt": [{"$size": {"$ifNull": ["$correctCommentIds", []]}}, 0]}, 1, 0]}}}},
-    ]))
-    comments = list(database.comments.aggregate([
-        {"$match": match},
-        {"$group": {"_id": "$author.userId", "comments": {"$sum": 1},
-                    "correctComments": {"$sum": {"$cond": ["$isCorrect", 1, 0]}}}},
-    ]))
-    by_student = {}
-    for row in posts + comments:
-        entry = by_student.setdefault(row["_id"], {"posts": 0, "resolvedPosts": 0,
-                                                     "comments": 0, "correctComments": 0})
-        entry.update({key: value for key, value in row.items() if key != "_id"})
-    users = {user["_id"]: user for user in database.users.find(
-        {"_id": {"$in": list(by_student)}, "role": "STUDENT"},
-        {"fullName": 1, "username": 1})}
-    rows = [{"name": users[user_id]["fullName"], "username": users[user_id]["username"], **counts}
-            for user_id, counts in by_student.items() if user_id in users]
-    return sorted(rows, key=lambda row: row["username"])
+                        {"$gt": ["$correctCommentCount", 0]},
+                        1,
+                        0,
+                    ]}},
+                }},
+            ],
+            "as": "postStats",
+        }},
+        {"$lookup": {
+            "from": "comments",
+            "let": {"uid": "$_id"},
+            "pipeline": [
+                {"$match": {"$expr": {"$and": [
+                    {"$eq": ["$spaceId", space["_id"]]},
+                    {"$eq": ["$author.userId", "$$uid"]},
+                ]}}},
+                {"$group": {
+                    "_id": None,
+                    "comments": {"$sum": 1},
+                    "correctComments": {"$sum": {"$cond": ["$isCorrect", 1, 0]}},
+                }},
+            ],
+            "as": "commentStats",
+        }},
+        {"$project": {
+            "_id": 0,
+            "name": "$fullName",
+            "username": 1,
+            "posts": {"$ifNull": [{"$first": "$postStats.posts"}, 0]},
+            "resolvedPosts": {"$ifNull": [{"$first": "$postStats.resolvedPosts"}, 0]},
+            "comments": {"$ifNull": [{"$first": "$commentStats.comments"}, 0]},
+            "correctComments": {"$ifNull": [{"$first": "$commentStats.correctComments"}, 0]},
+        }},
+    ]
+    return list(database.users.aggregate(pipeline))

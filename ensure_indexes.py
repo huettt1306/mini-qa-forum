@@ -7,9 +7,15 @@ from api.db import database
 INDEXES = {
     "users": [
         ("username_1", [("username", ASCENDING)], True),
+        ("role_1_class_1", [("role", ASCENDING), ("class", ASCENDING)], False),
     ],
     "subject_classes": [
-        ("targetClass_1_subjectName_1", [("targetClass", ASCENDING), ("subjectName", ASCENDING)], True),
+        ("targetClass_1_subject_1_grade_1",
+         [("targetClass", ASCENDING), ("subject", ASCENDING), ("grade", ASCENDING)], True),
+        ("teacherId_1", [("teacherId", ASCENDING)], False),
+    ],
+    "topics": [
+        ("createdAt_-1__id_-1", [("createdAt", DESCENDING), ("_id", DESCENDING)], False),
         ("teacherId_1", [("teacherId", ASCENDING)], False),
     ],
     "posts": [
@@ -28,6 +34,8 @@ INDEXES = {
         ("recipientId_1_isRead_1", [("recipientId", ASCENDING), ("isRead", ASCENDING)], False),
         ("type_1_commentId_1_recipientId_1",
          [("type", ASCENDING), ("commentId", ASCENDING), ("recipientId", ASCENDING)], True),
+        ("commentId_1", [("commentId", ASCENDING)], False),
+        ("postId_1", [("postId", ASCENDING)], False),
     ],
 }
 

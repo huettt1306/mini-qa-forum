@@ -43,7 +43,7 @@
                         class="d-flex gap-1">
                         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
                         <select class="form-select form-select-sm" name="teacher_id">
-                            {% for teacher in teachers if teacher.subject == item.subjectName.rsplit(' ', 1)[0] %}
+                            {% for teacher in teachers if teacher.subject == item.subject %}
                             <option value="{{ teacher._id }}" {% if teacher._id==item.teacherId %}selected{% endif %}>{{
                                 teacher.fullName }}</option>
                             {% endfor %}

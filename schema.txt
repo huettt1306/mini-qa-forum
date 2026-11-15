@@ -13,17 +13,19 @@ Không có collection images và không có trường imageId.
    Index: username ASC, unique.
 
 2. subject_classes
-   _id, subjectName (string, tên môn kèm khối, ví dụ "Tiếng Anh 10"),
+   _id, subject (string, ví dụ "Tiếng Anh"), grade (string, ví dụ "10"),
+   subjectName (string chỉ dùng hiển thị, ví dụ "Tiếng Anh 10"),
    targetClass (string, mã lớp hành chính), teacherId -> users._id,
    teacherName (string, tên giáo viên được lưu kèm).
-   Index: (targetClass ASC, subjectName ASC) unique; teacherId ASC.
-   Hiện không có trường subject riêng; logic phân công lấy tên môn bằng cách
-   bỏ từ cuối trong subjectName (khối lớp).
+   Index: (targetClass ASC, subject ASC, grade ASC) unique; teacherId ASC.
+   Nghiệp vụ phân quyền dùng subject và grade tường minh, không phân tích
+   subjectName.
 
 3. topics
    _id, title, description (string), teacherId -> users._id,
    teacherName (string), createdAt.
-   Chủ đề mở cho mọi người dùng đã đăng nhập. Chưa có index ngoài _id mặc định.
+   Chủ đề mở cho mọi người dùng đã đăng nhập.
+   Index: (createdAt DESC, _id DESC); teacherId ASC.
 
 4. posts
    _id, title, content (string),
@@ -31,7 +33,7 @@ Không có collection images và không có trường imageId.
    spaceType (SUBJECT_CLASS | TOPIC),
    spaceId -> subject_classes._id hoặc topics._id tùy spaceType,
    commentCount (int, bắt đầu 0, tăng bằng $inc khi thêm phản hồi),
-   correctCommentIds (mảng ObjectId -> comments._id), createdAt.
+   correctCommentCount (int, số phản hồi đúng), createdAt.
    Index: (spaceId ASC, spaceType ASC, createdAt DESC, _id DESC);
           (spaceId ASC, author.userId ASC).
    Danh sách bài viết sắp xếp createdAt DESC, _id DESC và phân trang 10 bài.
@@ -43,7 +45,7 @@ Không có collection images và không có trường imageId.
    Index: (postId ASC, isCorrect DESC, createdAt ASC);
           (spaceId ASC, author.userId ASC).
    Phản hồi mới có isCorrect = false. Giáo viên phụ trách thay đổi trạng thái
-   duyệt; ID phản hồi đúng được thêm/xóa trong posts.correctCommentIds.
+   duyệt; posts.correctCommentCount được tăng/giảm trong cùng transaction.
 
 6. notifications
    _id, recipientId -> users._id, actorId -> users._id,
@@ -56,7 +58,8 @@ Không có collection images và không có trường imageId.
    khi hủy duyệt, chỉ thông báo ANSWER_APPROVED tương ứng bị xóa.
    Index: (recipientId ASC, createdAt DESC, _id DESC);
           (recipientId ASC, isRead ASC);
-          (type ASC, commentId ASC, recipientId ASC) unique.
+          (type ASC, commentId ASC, recipientId ASC) unique;
+          commentId ASC; postId ASC.
    Danh sách thông báo lọc theo recipientId và phân trang 20 mục; số chưa đọc
    đếm theo recipientId + isRead=false. Đánh dấu đã đọc chỉ cập nhật bản ghi
    của chính recipientId.
@@ -65,7 +68,12 @@ RÀNG BUỘC VÀ CẬP NHẬT
    - MongoDB không tự áp khóa ngoại; ứng dụng kiểm tra quyền và quan hệ trước
      các thao tác. author và teacherName là dữ liệu sao chép để hiển thị.
    - Tạo phản hồi, tăng posts.commentCount và tạo NEW_COMMENT cùng transaction.
-   - Duyệt/hủy duyệt cập nhật comments.isCorrect, posts.correctCommentIds và
+   - Duyệt/hủy duyệt cập nhật comments.isCorrect, posts.correctCommentCount và
      tạo/xóa ANSWER_APPROVED cùng transaction.
+   - Tác giả, giáo viên phụ trách hoặc admin được xóa nội dung theo quyền.
+   - Xóa phản hồi đồng thời giảm commentCount, giảm correctCommentCount nếu
+     đó là đáp án đúng, và xóa notification theo commentId trong transaction.
+   - Xóa bài viết đồng thời xóa toàn bộ comments và notifications tham chiếu
+     qua postId trong cùng transaction.
    - Seed hiện tạo 1.571 users, 210 subject_classes, 5 topics, 1.000 posts,
      4.000 comments và 4.400 notifications; không tạo ảnh.

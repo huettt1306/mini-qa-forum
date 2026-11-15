@@ -15,6 +15,15 @@
     <div class="card-body p-4">
         <div class="d-flex justify-content-between align-items-start mb-2">
             <h3 class="fw-bold text-dark">{{ post.title }}</h3>
+            {% if can_delete_post %}
+            <form action="{{ url_for('post_delete', post_id=post._id) }}" method="POST"
+                onsubmit="return confirm('Bạn chắc chắn muốn xóa bài viết và toàn bộ phản hồi?')">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-trash me-1"></i>Xóa bài viết
+                </button>
+            </form>
+            {% endif %}
         </div>
         <p class="text-muted small mb-3">
             Đăng bởi <strong>{{ post.author.fullName }}</strong> ({{ post.author.role }})
@@ -62,6 +71,16 @@
                     <button class="btn btn-outline-warning btn-sm">Hủy duyệt</button>
                 </form>
                 {% endif %}
+                {% endif %}
+
+                {% if c._id in deletable_comment_ids %}
+                <form action="{{ url_for('comment_delete', post_id=post._id, comment_id=c._id) }}" method="POST"
+                    class="d-inline" onsubmit="return confirm('Bạn chắc chắn muốn xóa phản hồi này?')">
+                    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <i class="bi bi-trash me-1"></i>Xóa
+                    </button>
+                </form>
                 {% endif %}
             </div>
         </div>
