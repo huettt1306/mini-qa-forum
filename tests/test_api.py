@@ -55,7 +55,7 @@ class ForumTest(unittest.TestCase):
     def test_student_cannot_open_other_class(self):
         self.login_as()
         other = {"_id": self.space_id, "targetClass": "11A1", "teacherId": ObjectId(),
-                 "subjectName": "Toán 11"}
+                 "subject": "Toán"}
         with patch.object(store, "get_space", return_value=other):
             response = self.client.get(f"/space/SUBJECT_CLASS/{self.space_id}")
         self.assertEqual(response.status_code, 403)
@@ -73,7 +73,7 @@ class ForumTest(unittest.TestCase):
     def test_post_form_passes_text_to_db(self):
         self.login_as()
         space = {"_id": self.space_id, "targetClass": "10A1", "teacherId": ObjectId(),
-                 "subjectName": "Toán 10"}
+                 "subject": "Toán"}
         with patch.object(store, "get_space", return_value=space), \
              patch.object(store, "create_post") as create:
             response = self.client.post(
@@ -87,7 +87,7 @@ class ForumTest(unittest.TestCase):
     def test_file_upload_rejected(self):
         self.login_as()
         space = {"_id": self.space_id, "targetClass": "10A1", "teacherId": ObjectId(),
-                 "subjectName": "Toán 10"}
+                 "subject": "Toán"}
         with patch.object(store, "get_space", return_value=space), \
              patch.object(store, "create_post") as create:
             response = self.client.post(
@@ -102,25 +102,6 @@ class ForumTest(unittest.TestCase):
     def test_invalid_id_is_handled(self):
         with self.assertRaises(store.InvalidInput):
             store.object_id("not-an-id")
-
-    def test_notifications_use_logged_in_recipient(self):
-        self.login_as()
-        with patch.object(store, "list_notifications", return_value=([], 2)) as listing:
-            response = self.client.get("/notifications?format=json")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json["unreadCount"], 2)
-        listing.assert_called_once_with(self.user_id, 1)
-
-    def test_mark_notification_read_requires_csrf_and_recipient(self):
-        self.login_as()
-        notice_id = ObjectId()
-        with patch.object(store, "mark_notification_read") as mark:
-            self.assertEqual(self.client.post(f"/notifications/{notice_id}/read").status_code, 400)
-            mark.assert_not_called()
-            response = self.client.post(f"/notifications/{notice_id}/read",
-                                        data={"_csrf": "test-token"})
-        self.assertEqual(response.status_code, 302)
-        mark.assert_called_once_with(str(notice_id), self.user_id)
 
     def test_delete_comment_requires_csrf_and_redirects_after_success(self):
         comment_id = ObjectId()

@@ -10,12 +10,11 @@ INDEXES = {
         ("role_1_class_1", [("role", ASCENDING), ("class", ASCENDING)], False),
     ],
     "subject_classes": [
-        ("targetClass_1_subject_1_grade_1",
-         [("targetClass", ASCENDING), ("subject", ASCENDING), ("grade", ASCENDING)], True),
+        ("targetClass_1_subject_1",
+         [("targetClass", ASCENDING), ("subject", ASCENDING)], True),
         ("teacherId_1", [("teacherId", ASCENDING)], False),
     ],
     "topics": [
-        ("createdAt_-1__id_-1", [("createdAt", DESCENDING), ("_id", DESCENDING)], False),
         ("teacherId_1", [("teacherId", ASCENDING)], False),
     ],
     "posts": [
@@ -26,17 +25,9 @@ INDEXES = {
     "comments": [
         ("postId_1_isCorrect_-1_createdAt_1",
          [("postId", ASCENDING), ("isCorrect", DESCENDING), ("createdAt", ASCENDING)], False),
-        ("spaceId_1_author.userId_1", [("spaceId", ASCENDING), ("author.userId", ASCENDING)], False),
+        ("author.userId_1_postId_1", [("author.userId", ASCENDING), ("postId", ASCENDING)], False),
     ],
-    "notifications": [
-        ("recipientId_1_createdAt_-1__id_-1",
-         [("recipientId", ASCENDING), ("createdAt", DESCENDING), ("_id", DESCENDING)], False),
-        ("recipientId_1_isRead_1", [("recipientId", ASCENDING), ("isRead", ASCENDING)], False),
-        ("type_1_commentId_1_recipientId_1",
-         [("type", ASCENDING), ("commentId", ASCENDING), ("recipientId", ASCENDING)], True),
-        ("commentId_1", [("commentId", ASCENDING)], False),
-        ("postId_1", [("postId", ASCENDING)], False),
-    ],
+
 }
 
 

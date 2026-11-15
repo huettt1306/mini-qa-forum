@@ -7,7 +7,7 @@
             {% for kind, item in spaces %}
             <option value="{{ kind }}:{{ item._id }}" {% if selected_type==kind and selected_id==item._id|string
                 %}selected{% endif %}>
-                {{ item.subjectName if kind == 'SUBJECT_CLASS' else item.title }}{% if kind == 'SUBJECT_CLASS' %} — {{
+                {{ item.subject if kind == 'SUBJECT_CLASS' else item.title }}{% if kind == 'SUBJECT_CLASS' %} — {{
                 item.targetClass }}{% endif %}
             </option>{% endfor %}
         </select></div>

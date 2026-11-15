@@ -39,31 +39,13 @@ class DataRulesTest(unittest.TestCase):
         with patch.object(store, "database", fake_db), patch.object(store, "client", fake_client):
             store.create_comment(post, user, "Lời giải")
         comment = fake_db.comments.insert_one.call_args.args[0]
-        self.assertEqual(comment["spaceId"], post["spaceId"])
+        self.assertNotIn("spaceId", comment)
         self.assertEqual(comment["postId"], post["_id"])
         self.assertEqual(fake_db.posts.update_one.call_args.args[1], {"$inc": {"commentCount": 1}})
         self.assertIs(
             fake_db.comments.insert_one.call_args.kwargs["session"],
             fake_db.posts.update_one.call_args.kwargs["session"],
         )
-        notice = fake_db.notifications.insert_one.call_args.args[0]
-        self.assertEqual(notice["recipientId"], post["author"]["userId"])
-        self.assertEqual(notice["commentId"], comment["_id"])
-        self.assertEqual(notice["message"], store.NOTIFICATION_MESSAGES["NEW_COMMENT"])
-        self.assertIs(notice["isRead"], False)
-        self.assertIs(fake_db.notifications.insert_one.call_args.kwargs["session"],
-                      fake_db.comments.insert_one.call_args.kwargs["session"])
-
-    def test_self_comment_has_no_notification(self):
-        user = {"_id": ObjectId(), "fullName": "Học sinh", "role": "STUDENT"}
-        post = {"_id": ObjectId(), "spaceId": ObjectId(), "spaceType": "TOPIC",
-                "author": {"userId": user["_id"]}}
-        fake_db = MagicMock()
-        fake_db.posts.update_one.return_value.matched_count = 1
-        with patch.object(store, "database", fake_db), patch.object(store, "client", MagicMock()):
-            store.create_comment(post, user, "Bổ sung")
-        fake_db.notifications.insert_one.assert_not_called()
-
     def test_delete_comment_twice_decrements_count_only_once(self):
         post_id, comment_id, author_id = ObjectId(), ObjectId(), ObjectId()
         post = {"_id": post_id, "spaceId": ObjectId(), "spaceType": "TOPIC",
@@ -90,8 +72,6 @@ class DataRulesTest(unittest.TestCase):
             {"_id": post_id, "commentCount": {"$gt": 0}},
             {"$inc": {"commentCount": -1}},
         ))
-        fake_db.notifications.delete_many.assert_called_once_with(
-            {"commentId": comment_id}, session=fake_db.notifications.delete_many.call_args.kwargs["session"])
 
     def test_delete_correct_comment_decrements_both_counts(self):
         post_id, comment_id, author_id = ObjectId(), ObjectId(), ObjectId()
@@ -128,7 +108,6 @@ class DataRulesTest(unittest.TestCase):
         self.assertEqual(fake_db.comments.find_one.call_args.args[0],
                          {"_id": comment_id, "postId": post_id})
         fake_db.posts.update_one.assert_not_called()
-        fake_db.notifications.delete_many.assert_not_called()
 
     def test_delete_post_cascades_in_same_transaction(self):
         post_id, author_id = ObjectId(), ObjectId()
@@ -143,7 +122,6 @@ class DataRulesTest(unittest.TestCase):
         self.assertEqual(deleted, post)
         session = fake_db.posts.delete_one.call_args.kwargs["session"]
         fake_db.comments.delete_many.assert_called_once_with({"postId": post_id}, session=session)
-        fake_db.notifications.delete_many.assert_called_once_with({"postId": post_id}, session=session)
 
     def test_delete_comment_requires_author_moderator_or_admin(self):
         post_id, comment_id = ObjectId(), ObjectId()
@@ -211,51 +189,18 @@ class DataRulesTest(unittest.TestCase):
         )
         fake_db.posts.update_one.assert_not_called()
 
-    def test_approval_creates_and_unmark_removes_only_approval_notice(self):
+    def test_approval_updates_count_without_notification(self):
         post = {"_id": ObjectId(), "spaceId": ObjectId(), "spaceType": "TOPIC"}
-        author_id, teacher_id, comment_id = ObjectId(), ObjectId(), ObjectId()
-        actor = {"_id": teacher_id, "role": "TEACHER"}
-        comment = {"_id": comment_id, "author": {"userId": author_id}}
+        actor = {"_id": ObjectId(), "role": "TEACHER"}
         fake_db = MagicMock()
         fake_db.posts.find_one.return_value = post
-        fake_db.comments.find_one_and_update.return_value = comment
+        fake_db.comments.find_one_and_update.return_value = {"_id": ObjectId()}
         fake_db.posts.update_one.return_value.matched_count = 1
         with patch.object(store, "database", fake_db), patch.object(store, "client", MagicMock()), \
              patch.object(store, "_can_moderate_post", return_value=True):
-            store.set_correct(post["_id"], comment_id, True, actor)
-            store.set_correct(post["_id"], comment_id, False, actor)
-        self.assertEqual(fake_db.posts.update_one.call_args_list[0].args, (
-            {"_id": post["_id"]}, {"$inc": {"correctCommentCount": 1}}))
-        self.assertEqual(fake_db.posts.update_one.call_args_list[1].args, (
-            {"_id": post["_id"], "correctCommentCount": {"$gt": 0}},
-            {"$inc": {"correctCommentCount": -1}}))
-        self.assertEqual(fake_db.notifications.insert_one.call_args.args[0]["type"], "ANSWER_APPROVED")
-        self.assertEqual(fake_db.notifications.insert_one.call_args.args[0]["message"],
-                         store.NOTIFICATION_MESSAGES["ANSWER_APPROVED"])
-        self.assertIs(fake_db.notifications.insert_one.call_args.args[0]["isRead"], False)
-        self.assertEqual(fake_db.notifications.delete_one.call_args.args[0], {
-            "type": "ANSWER_APPROVED", "commentId": comment_id, "recipientId": author_id})
-        self.assertIs(fake_db.notifications.insert_one.call_args.kwargs["session"],
-                      fake_db.posts.update_one.call_args.kwargs["session"])
-
-    def test_mark_read_is_scoped_to_recipient(self):
-        fake_db = MagicMock()
-        fake_db.notifications.update_one.return_value.matched_count = 0
-        fake_db.notifications.find_one.return_value = None
-        with patch.object(store, "database", fake_db):
-            with self.assertRaises(store.EntityNotFound):
-                store.mark_notification_read(ObjectId(), ObjectId())
-        self.assertIn("recipientId", fake_db.notifications.update_one.call_args.args[0])
-        self.assertEqual(fake_db.notifications.update_one.call_args.args[1], {"$set": {"isRead": True}})
-        fake_db.notifications.find_one.assert_not_called()
-
-    def test_mark_read_is_idempotent_with_one_update(self):
-        fake_db = MagicMock()
-        fake_db.notifications.update_one.return_value.matched_count = 1
-        with patch.object(store, "database", fake_db):
-            store.mark_notification_read(ObjectId(), ObjectId())
-        fake_db.notifications.update_one.assert_called_once()
-        fake_db.notifications.find_one.assert_not_called()
+            store.set_correct(post["_id"], ObjectId(), True, actor)
+            store.set_correct(post["_id"], ObjectId(), False, actor)
+        self.assertEqual(fake_db.posts.update_one.call_count, 2)
 
     def test_set_correct_requires_assigned_teacher_before_writes(self):
         post = {"_id": ObjectId(), "spaceId": ObjectId(), "spaceType": "TOPIC"}
@@ -274,15 +219,6 @@ class DataRulesTest(unittest.TestCase):
                     store.set_correct(post["_id"], ObjectId(), True, actor)
         fake_db.comments.find_one_and_update.assert_not_called()
         fake_db.posts.update_one.assert_not_called()
-
-    def test_unread_count_uses_boolean(self):
-        fake_db = MagicMock()
-        fake_db.notifications.find.return_value.sort.return_value.skip.return_value.limit.return_value = []
-        fake_db.notifications.count_documents.return_value = 3
-        with patch.object(store, "database", fake_db):
-            _, count = store.list_notifications(ObjectId())
-        self.assertEqual(count, 3)
-        self.assertEqual(fake_db.notifications.count_documents.call_args.args[0]["isRead"], False)
 
     def test_teacher_report_aggregates_from_all_students_in_class(self):
         teacher_id = ObjectId()
@@ -304,13 +240,15 @@ class DataRulesTest(unittest.TestCase):
                          ["posts", "comments"])
         fake_db.posts.aggregate.assert_not_called()
         fake_db.comments.aggregate.assert_not_called()
+        comment_pipeline = pipeline[3]["$lookup"]["pipeline"]
+        self.assertEqual(comment_pipeline[1]["$lookup"]["from"], "posts")
         post_group = pipeline[2]["$lookup"]["pipeline"][1]["$group"]
         self.assertEqual(post_group["resolvedPosts"]["$sum"]["$cond"][0],
                          {"$gt": ["$correctCommentCount", 0]})
 
     def test_assign_teacher_uses_explicit_subject(self):
         space = {"_id": ObjectId(), "subject": "Tiếng Anh",
-                 "subjectName": "Tên hiển thị không dùng để phân quyền"}
+                 "targetClass": "10A1"}
         teacher = {"_id": ObjectId(), "role": "TEACHER", "subject": "Tiếng Anh",
                    "fullName": "Giáo viên"}
         fake_db = MagicMock()

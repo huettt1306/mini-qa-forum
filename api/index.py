@@ -4,14 +4,12 @@ import os
 import secrets
 from pathlib import Path
 
-from flask import Flask, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 
 if __package__:
     from . import db as store
-    from .constants import NOTIFICATIONS_PER_PAGE, POSTS_PER_PAGE
 else:
     import db as store
-    from constants import NOTIFICATIONS_PER_PAGE, POSTS_PER_PAGE
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 app = Flask(__name__, template_folder=str(BASE_DIR / "templates"))
@@ -156,12 +154,12 @@ def space_detail(space_type, space_id):
     search = request.args.get("q", "").strip()
     status = request.args.get("status", "all")
     rows = store.list_posts(space_type, space_id, search, status, g.user["_id"], page)
-    space_name = (f"{space['subjectName']} - Lớp {space['targetClass']}"
+    space_name = (f"{space['subject']} - Lớp {space['targetClass']}"
                   if space_type == "SUBJECT_CLASS" else space["title"])
     return render_template("space.html", space=space, space_name=space_name,
                            space_type=space_type, space_id=space_id,
-                           posts=rows[:POSTS_PER_PAGE],
-                           has_next=len(rows) > POSTS_PER_PAGE,
+                           posts=rows[:store.POSTS_PER_PAGE],
+                           has_next=len(rows) > store.POSTS_PER_PAGE,
                            page=page, search=search, status=status)
 
 
@@ -223,31 +221,6 @@ def unmark_correct(post_id, comment_id):
     store.set_correct(post_id, comment_id, False, user)
     flash("Đã hủy duyệt đáp án", "success")
     return redirect(url_for("post_detail", post_id=post_id))
-
-
-@app.route("/notifications")
-def notifications():
-    user = require_user()
-    page = request.args.get("page", 1, type=int)
-    rows, unread = store.list_notifications(user["_id"], page)
-    has_next = len(rows) > NOTIFICATIONS_PER_PAGE
-    notices = [{
-        "id": str(row["_id"]), "type": row["type"], "message": row["message"],
-        "postId": str(row["postId"]), "commentId": str(row["commentId"]),
-        "createdAt": row["createdAt"].isoformat(),
-        "isRead": row["isRead"],
-    } for row in rows[:NOTIFICATIONS_PER_PAGE]]
-    if request.accept_mimetypes.best == "application/json" or request.args.get("format") == "json":
-        return jsonify(notifications=notices, unreadCount=unread)
-    return render_template("notifications.html", notifications=notices,
-                           unread_count=unread, page=page, has_next=has_next)
-
-
-@app.route("/notifications/<notification_id>/read", methods=["POST"])
-def notification_read(notification_id):
-    user = require_user()
-    store.mark_notification_read(notification_id, user["_id"])
-    return redirect(url_for("notifications"))
 
 
 @app.route("/admin")

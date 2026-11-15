@@ -71,7 +71,6 @@ admin_doc = {
     "fullName": "Quản trị viên Hệ thống",
     "role": "ADMIN",
     "class": None,
-    "createdAt": datetime.utcnow()
 }
 db.users.insert_one(admin_doc)
 
@@ -95,7 +94,6 @@ for mon in CORE_SUBJECTS:
             "role": "TEACHER",
             "class": None,
             "subject": mon,
-            "createdAt": datetime.utcnow()
         }
         teachers.append(t_doc)
         teachers_by_subject[mon].append(t_doc)
@@ -123,7 +121,6 @@ for class_name in classes:
             "fullName": s_name,
             "role": "STUDENT",
             "class": class_name,
-            "createdAt": datetime.utcnow()
         }
         students.append(s_doc)
         students_by_class[class_name].append(s_doc)
@@ -153,8 +150,6 @@ for mon in CORE_SUBJECTS:
         for grade, grade_classes in assigned_classes.items():
             subject_classes.append({
                 "subject": mon,
-                "grade": grade,
-                "subjectName": f"{mon} {grade}",
                 "targetClass": grade_classes[i],
                 "teacherId": teacher["_id"],
                 "teacherName": teacher["fullName"],
@@ -201,7 +196,6 @@ for t_def in open_topics_def:
         "description": t_def["description"],
         "teacherId": lead_teacher["_id"],
         "teacherName": lead_teacher["fullName"],
-        "createdAt": datetime.utcnow() - timedelta(days=10)
     })
 
 db.topics.insert_many(topics)
@@ -274,7 +268,6 @@ teachers_by_id = {teacher["_id"]: teacher for teacher in teachers}
 
 posts_to_insert = []
 comments_to_insert = []
-notifications_to_insert = []
 for number, state in enumerate(states, start=1):
     space_type, space = spaces[(number - 1) % len(spaces)]
     teacher = teachers_by_id[space["teacherId"]]
@@ -306,7 +299,6 @@ for number, state in enumerate(states, start=1):
         comments_to_insert.append({
             "_id": comment_id,
             "postId": post_id,
-            "spaceId": space["_id"],
             "author": {
                 "userId": answerer["_id"],
                 "fullName": answerer["fullName"],
@@ -316,22 +308,6 @@ for number, state in enumerate(states, start=1):
             "isCorrect": is_correct,
             "createdAt": comment_time,
         })
-        notifications_to_insert.append({
-            "recipientId": asker["_id"], "actorId": answerer["_id"],
-            "type": "NEW_COMMENT", "message": "Có phản hồi mới trong bài viết của bạn",
-            "postId": post_id, "commentId": comment_id,
-            "spaceId": space["_id"], "spaceType": space_type,
-            "createdAt": comment_time, "isRead": False,
-        })
-        if is_correct:
-            notifications_to_insert.append({
-                "recipientId": answerer["_id"], "actorId": teacher["_id"],
-                "type": "ANSWER_APPROVED", "message": "Câu trả lời của bạn đã được giáo viên duyệt",
-                "postId": post_id, "commentId": comment_id,
-                "spaceId": space["_id"], "spaceType": space_type,
-                "createdAt": comment_time + timedelta(minutes=5), "isRead": False,
-            })
-
     posts_to_insert.append({
         "_id": post_id,
         "title": f"{question_title} [#{number:04d}]",
@@ -350,12 +326,10 @@ for number, state in enumerate(states, start=1):
 
 assert len(posts_to_insert) == 1000
 assert len(comments_to_insert) == 4000
-assert len(notifications_to_insert) == 4400
 db.posts.insert_many(posts_to_insert)
 db.comments.insert_many(comments_to_insert)
-db.notifications.insert_many(notifications_to_insert)
 
-print(f"   -> Đã tạo {len(posts_to_insert)} bài viết, {len(comments_to_insert)} phản hồi và {len(notifications_to_insert)} thông báo.")
+print(f"   -> Đã tạo {len(posts_to_insert)} bài viết, {len(comments_to_insert)} phản hồi.")
 print("   -> 250 bài chưa có phản hồi, 350 bài đang thảo luận, 400 bài đã giải quyết.")
 
 print("\n" + "=" * 60)

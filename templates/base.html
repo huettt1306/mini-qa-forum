@@ -19,10 +19,6 @@
                     trị</a>{% endif %}
                 {% if g.user.role == 'TEACHER' %}<a class="text-white" href="{{ url_for('reports') }}">Báo cáo</a>{%
                 endif %}
-                <a class="text-white position-relative" href="{{ url_for('notifications') }}" aria-label="Thông báo">
-                    <i class="bi bi-bell fs-5"></i><span id="notification-badge"
-                        class="badge rounded-pill bg-danger position-absolute top-0 start-100 translate-middle d-none">0</span>
-                </a>
                 <a class="text-white" href="{{ url_for('password') }}">Đổi mật khẩu</a>
                 <span class="text-white small">
                     <i class="bi bi-person-circle me-1"></i><strong>{{ g.user.fullName }}</strong>
@@ -57,24 +53,6 @@
         Bài tập lớn CSDL Phân Tán &copy; 2026 - Mini Academic Q&A Forum
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    {% if g.user %}
-    <script>
-        async function refreshNotifications() {
-            if (document.visibilityState !== 'visible') return;
-            try {
-                const response = await fetch('{{ url_for("notifications") }}?format=json', { credentials: 'same-origin' });
-                if (!response.ok) return;
-                const count = (await response.json()).unreadCount;
-                const badge = document.getElementById('notification-badge');
-                badge.textContent = count > 99 ? '99+' : count;
-                badge.classList.toggle('d-none', count === 0);
-            } catch (_) { /* Mất kết nối tạm thời: thử lại ở lần tải tiếp theo. */ }
-        }
-        refreshNotifications();
-        document.addEventListener('visibilitychange', refreshNotifications);
-        setInterval(refreshNotifications, 45000);
-    </script>
-    {% endif %}
 </body>
 
 </html>

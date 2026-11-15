@@ -8,10 +8,7 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from pymongo import MongoClient, ReturnDocument
 
-if __package__:
-    from .constants import NOTIFICATIONS_PER_PAGE, POSTS_PER_PAGE
-else:
-    from constants import NOTIFICATIONS_PER_PAGE, POSTS_PER_PAGE
+POSTS_PER_PAGE = 10
 
 
 class ForumError(Exception):
@@ -32,12 +29,6 @@ class ConflictError(ForumError):
 
 class InvalidInput(ForumError):
     pass
-
-
-NOTIFICATION_MESSAGES = {
-    "NEW_COMMENT": "Có phản hồi mới trong bài viết của bạn",
-    "ANSWER_APPROVED": "Câu trả lời của bạn đã được giáo viên duyệt",
-}
 
 
 def load_mongo_uri():
@@ -102,7 +93,7 @@ def list_spaces(user):
         query = {"teacherId": user["_id"]}
     else:
         query = {}
-    topics = database.topics.find().sort([("createdAt", -1), ("_id", -1)])
+    topics = database.topics.find().sort("_id", -1)
     return list(database.subject_classes.find(query)), list(topics)
 
 
@@ -171,7 +162,7 @@ def create_post(space_type, space_id, user, title, content):
 def create_comment(post, user, content):
     comment_id = ObjectId()
     doc = {
-        "_id": comment_id, "postId": post["_id"], "spaceId": post["spaceId"],
+        "_id": comment_id, "postId": post["_id"],
         "author": {"userId": user["_id"], "fullName": user["fullName"], "role": user["role"]},
         "content": content, "isCorrect": False, "createdAt": datetime.now(timezone.utc),
     }
@@ -182,16 +173,6 @@ def create_comment(post, user, content):
                 {"_id": post["_id"]}, {"$inc": {"commentCount": 1}}, session=session)
             if not result.matched_count:
                 raise EntityNotFound("Bài viết không còn tồn tại")
-            recipient_id = post["author"]["userId"]
-            if recipient_id != user["_id"]:
-                database.notifications.insert_one({
-                    "recipientId": recipient_id, "actorId": user["_id"],
-                    "type": "NEW_COMMENT", "message": NOTIFICATION_MESSAGES["NEW_COMMENT"],
-                    "postId": post["_id"],
-                    "commentId": comment_id, "spaceId": post["spaceId"],
-                    "spaceType": post["spaceType"], "createdAt": doc["createdAt"],
-                    "isRead": False,
-                }, session=session)
     return comment_id
 
 
@@ -242,7 +223,6 @@ def delete_comment(post_id, comment_id, actor):
                 post_filter, {"$inc": decrements}, session=session)
             if not result.matched_count:
                 raise ConflictError("Số lượng phản hồi không còn nhất quán")
-            database.notifications.delete_many({"commentId": comment_id}, session=session)
     return post
 
 
@@ -261,7 +241,6 @@ def delete_post(post_id, actor):
             if not deleted.deleted_count:
                 raise ConflictError("Bài viết đã được xóa trong một phiên khác")
             database.comments.delete_many({"postId": post_id}, session=session)
-            database.notifications.delete_many({"postId": post_id}, session=session)
     return post
 
 
@@ -289,38 +268,6 @@ def set_correct(post_id, comment_id, correct, actor):
                 post_filter, {"$inc": {"correctCommentCount": increment}}, session=session)
             if not result.matched_count:
                 raise ConflictError("Số đáp án đúng không còn nhất quán")
-            notice_query = {"type": "ANSWER_APPROVED", "commentId": comment_id,
-                            "recipientId": comment["author"]["userId"]}
-            if correct and comment["author"]["userId"] != actor["_id"]:
-                database.notifications.insert_one({
-                    **notice_query, "message": NOTIFICATION_MESSAGES["ANSWER_APPROVED"],
-                    "actorId": actor["_id"],
-                    "postId": post["_id"], "spaceId": post["spaceId"],
-                    "spaceType": post["spaceType"],
-                    "createdAt": datetime.now(timezone.utc), "isRead": False,
-                }, session=session)
-            elif not correct:
-                database.notifications.delete_one(notice_query, session=session)
-
-
-def list_notifications(user_id, page=1):
-    if page < 1:
-        raise InvalidInput("Trang không hợp lệ")
-    recipient_id = object_id(user_id)
-    rows = list(database.notifications.find({"recipientId": recipient_id})
-                .sort([("createdAt", -1), ("_id", -1)])
-                .skip((page - 1) * NOTIFICATIONS_PER_PAGE).limit(NOTIFICATIONS_PER_PAGE + 1))
-    unread = database.notifications.count_documents({"recipientId": recipient_id, "isRead": False})
-    return rows, unread
-
-
-def mark_notification_read(notification_id, user_id):
-    query = {"_id": object_id(notification_id), "recipientId": object_id(user_id)}
-    result = database.notifications.update_one(query, {"$set": {"isRead": True}})
-    if not result.matched_count:
-        raise EntityNotFound("Thông báo không tồn tại")
-
-
 def create_topic(title, description, teacher_id):
     teacher = get_user(teacher_id)
     if teacher["role"] != "TEACHER":
@@ -328,7 +275,6 @@ def create_topic(title, description, teacher_id):
     result = database.topics.insert_one({
         "title": title, "description": description,
         "teacherId": teacher["_id"], "teacherName": teacher["fullName"],
-        "createdAt": datetime.now(timezone.utc),
     })
     return result.inserted_id
 
@@ -398,10 +344,12 @@ def teacher_report(teacher_id, space_type, space_id):
             "from": "comments",
             "let": {"uid": "$_id"},
             "pipeline": [
-                {"$match": {"$expr": {"$and": [
-                    {"$eq": ["$spaceId", space["_id"]]},
-                    {"$eq": ["$author.userId", "$$uid"]},
-                ]}}},
+                {"$match": {"$expr": {"$eq": ["$author.userId", "$$uid"]}}},
+                {"$lookup": {"from": "posts", "localField": "postId",
+                             "foreignField": "_id", "as": "parentPost"}},
+                {"$unwind": "$parentPost"},
+                {"$match": {"parentPost.spaceId": space["_id"],
+                            "parentPost.spaceType": "SUBJECT_CLASS"}},
                 {"$group": {
                     "_id": None,
                     "comments": {"$sum": 1},

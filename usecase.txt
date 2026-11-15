@@ -18,18 +18,10 @@ HỆ THỐNG DIỄN ĐÀN HỎI ĐÁP HỌC TẬP THPT
    UC11 - Xem báo cáo theo lớp môn học/chủ đề mình phụ trách: số bài viết,
           bài đã giải quyết, phản hồi và phản hồi đúng của từng học sinh.
 
-4. THÔNG BÁO (NGƯỜI DÙNG ĐÃ ĐĂNG NHẬP)
-   UC12 - Tác giả bài viết nhận thông báo khi người khác gửi phản hồi mới.
-   UC13 - Tác giả phản hồi nhận thông báo khi giáo viên duyệt đáp án đúng.
-          Khi hủy duyệt, thông báo duyệt tương ứng bị xóa.
-   UC14 - Xem danh sách thông báo của mình (20 thông báo/trang), số chưa đọc,
-          mở liên kết tới phản hồi và đánh dấu từng thông báo là đã đọc.
-          Số chưa đọc được tải lại khi mở trang, quay lại tab và theo chu kỳ.
-
-5. QUẢN TRỊ (ADMIN)
-   UC15 - Xem dashboard với số lượng người dùng, lớp môn, chủ đề, bài viết, phản hồi.
-   UC16 - Tạo chủ đề mở và chỉ định giáo viên phụ trách.
-   UC17 - Gán hoặc đổi giáo viên phụ trách lớp môn học và chủ đề mở.
+4. QUẢN TRỊ (ADMIN)
+   UC12 - Xem dashboard với số lượng người dùng, lớp môn, chủ đề, bài viết, phản hồi.
+   UC13 - Tạo chủ đề mở và chỉ định giáo viên phụ trách.
+   UC14 - Gán hoặc đổi giáo viên phụ trách lớp môn học và chủ đề mở.
           Giáo viên được gán vào lớp môn phải dạy đúng môn đó.
 
 QUY TẮC CHUNG
@@ -39,5 +31,4 @@ QUY TẮC CHUNG
      được duyệt hoặc hủy duyệt đáp án.
    - Nội dung bài viết và phản hồi chỉ là văn bản; request có tệp bị từ chối.
    - Không có thao tác xóa bài viết hoặc xóa phản hồi trong ứng dụng.
-   - Các form thay đổi dữ liệu được bảo vệ bằng CSRF; thông báo chỉ hiển thị
-     và đánh dấu đã đọc bởi chính người nhận.
+   - Các form thay đổi dữ liệu được bảo vệ bằng CSRF.
