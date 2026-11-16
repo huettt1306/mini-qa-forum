@@ -65,6 +65,8 @@ def get_user(user_id):
 
 
 def authenticate(username, password):
+    if not isinstance(username, str) or not isinstance(password, str):
+        raise PermissionDenied("Tên đăng nhập hoặc mật khẩu không chính xác")
     user = database.users.find_one({"username": username})
     if not user or not bcrypt.checkpw(password.encode(), user["password"].encode()):
         raise PermissionDenied("Tên đăng nhập hoặc mật khẩu không chính xác")
@@ -268,6 +270,8 @@ def set_correct(post_id, comment_id, correct, actor):
                 post_filter, {"$inc": {"correctCommentCount": increment}}, session=session)
             if not result.matched_count:
                 raise ConflictError("Số đáp án đúng không còn nhất quán")
+
+
 def create_topic(title, description, teacher_id):
     teacher = get_user(teacher_id)
     if teacher["role"] != "TEACHER":
@@ -316,6 +320,10 @@ def teacher_report(teacher_id, space_type, space_id):
     space = get_space(space_type, space_id)
     if space["teacherId"] != object_id(teacher_id):
         raise PermissionDenied("Bạn không phụ trách không gian này")
+    return list(database.users.aggregate(teacher_report_pipeline(space)))
+
+
+def teacher_report_pipeline(space):
     pipeline = [
         {"$match": {"role": "STUDENT", "class": space["targetClass"]}},
         {"$sort": {"username": 1}},
@@ -345,11 +353,16 @@ def teacher_report(teacher_id, space_type, space_id):
             "let": {"uid": "$_id"},
             "pipeline": [
                 {"$match": {"$expr": {"$eq": ["$author.userId", "$$uid"]}}},
-                {"$lookup": {"from": "posts", "localField": "postId",
-                             "foreignField": "_id", "as": "parentPost"}},
-                {"$unwind": "$parentPost"},
-                {"$match": {"parentPost.spaceId": space["_id"],
-                            "parentPost.spaceType": "SUBJECT_CLASS"}},
+                {"$lookup": {
+                    "from": "posts", "localField": "postId", "foreignField": "_id",
+                    "pipeline": [
+                        {"$match": {"spaceId": space["_id"],
+                                    "spaceType": "SUBJECT_CLASS"}},
+                        {"$project": {"_id": 1}},
+                    ],
+                    "as": "parentPost",
+                }},
+                {"$match": {"parentPost.0": {"$exists": True}}},
                 {"$group": {
                     "_id": None,
                     "comments": {"$sum": 1},
@@ -368,4 +381,4 @@ def teacher_report(teacher_id, space_type, space_id):
             "correctComments": {"$ifNull": [{"$first": "$commentStats.correctComments"}, 0]},
         }},
     ]
-    return list(database.users.aggregate(pipeline))
+    return pipeline

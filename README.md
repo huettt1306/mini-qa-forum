@@ -29,3 +29,15 @@ python3 -m unittest discover -s tests -v
 ```
 
 Test dùng URI giả và mock các thao tác dữ liệu cần thiết. Test không đọc hoặc kết nối database trong `.env`.
+
+## Thực nghiệm index
+
+`benchmark/benchmark.py` reset `school_forum` một lần, nạp lũy tiến 5.000 → 50.000 → 100.000 document (giữ `_id` và cho `createdAt` tăng liên tục), đo trước/sau 9 index tại mỗi mốc, rồi reset về seed mặc định. Chỉ chạy khi dữ liệu trong database đều là giả lập.
+
+```bash
+venv/bin/python -u benchmark/benchmark.py
+```
+
+Mặc định mỗi truy vấn chạy 2 lượt làm nóng, 12 lượt `explain` và 12 lượt thật. Có thể chọn mốc và truy vấn: `--scales 100000 --queries regex_hot --server-repeats 10 --client-repeats 10`. Chọn riêng mốc 100.000 vẫn nạp lũy tiến qua 5.000 và 50.000 nhưng không đo ở hai mốc đó. Lượt chạy một phần được lưu riêng dưới `benchmark_results/runs/`. `--keep-data` giữ bộ benchmark sau khi chạy; khi đó `--reuse-existing --phase after --scales 100000 --queries regex_hot` chỉ đo trên dữ liệu có đủ index. Chế độ mặc định luôn khôi phục seed phát triển.
+
+Bảng và biểu đồ dùng trung vị thời gian server từ nhiều lượt `explain`; thời gian `perf_counter` phía ứng dụng được ghi riêng. Kết quả gồm `results.json`, `benchmark_summary.md`, `benchmark_table.csv`, `benchmark_chart.svg` và `benchmark_report.md` trong `benchmark_results/`. Có thể tạo riêng một bộ dữ liệu bằng `venv/bin/python seed.py --scale 50000`; sau đó chạy `venv/bin/python ensure_indexes.py` nếu cần index.

@@ -12,6 +12,14 @@ from ensure_indexes import ensure_indexes
 
 
 class DataRulesTest(unittest.TestCase):
+    def test_authenticate_rejects_non_string_before_database_lookup(self):
+        fake_db = MagicMock()
+        with patch.object(store, "database", fake_db):
+            for username, password in (({"$ne": ""}, "secret"), ("admin", {"$ne": ""})):
+                with self.assertRaises(store.PermissionDenied):
+                    store.authenticate(username, password)
+        fake_db.users.find_one.assert_not_called()
+
     def test_create_post_is_single_atomic_insert_without_transaction(self):
         space = {"_id": ObjectId()}
         user = {"_id": ObjectId(), "fullName": "Học sinh", "role": "STUDENT"}
@@ -242,6 +250,10 @@ class DataRulesTest(unittest.TestCase):
         fake_db.comments.aggregate.assert_not_called()
         comment_pipeline = pipeline[3]["$lookup"]["pipeline"]
         self.assertEqual(comment_pipeline[1]["$lookup"]["from"], "posts")
+        self.assertEqual(comment_pipeline[1]["$lookup"]["pipeline"], [
+            {"$match": {"spaceId": space_id, "spaceType": "SUBJECT_CLASS"}},
+            {"$project": {"_id": 1}},
+        ])
         post_group = pipeline[2]["$lookup"]["pipeline"][1]["$group"]
         self.assertEqual(post_group["resolvedPosts"]["$sum"]["$cond"][0],
                          {"$gt": ["$correctCommentCount", 0]})

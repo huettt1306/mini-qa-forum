@@ -1,3 +1,4 @@
+import argparse
 import os
 import random
 from datetime import datetime, timedelta
@@ -34,6 +35,13 @@ def load_mongo_uri():
 MONGO_URI = load_mongo_uri()
 client = MongoClient(MONGO_URI)
 db = client["school_forum"]
+parser = argparse.ArgumentParser()
+parser.add_argument("--scale", type=int, choices=(5000, 50000, 100000))
+args = parser.parse_args()
+if args.scale:
+    from benchmark.benchmark_seed import seed_scaled
+    seed_scaled(db, args.scale)
+    raise SystemExit(0)
 
 # --- 2. KHO TỪ ĐIỂN TÊN TIẾNG VIỆT ---
 HO_LIST = [

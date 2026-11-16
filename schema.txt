@@ -39,7 +39,7 @@ Không có collection images và không có trường imageId.
    _id, postId -> posts._id,
    author: {userId -> users._id, fullName, role},
    content (string), isCorrect (bool), createdAt.
-   Index: (postId ASC, isCorrect DESC, createdAt ASC);
+   Index: (postId ASC, isCorrect DESC, createdAt ASC, _id ASC);
           (author.userId ASC, postId ASC).
    Báo cáo nối comments.postId với posts._id bằng $lookup để lọc không gian.
    Phản hồi mới có isCorrect = false. Giáo viên phụ trách thay đổi trạng thái

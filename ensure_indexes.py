@@ -23,8 +23,8 @@ INDEXES = {
         ("spaceId_1_author.userId_1", [("spaceId", ASCENDING), ("author.userId", ASCENDING)], False),
     ],
     "comments": [
-        ("postId_1_isCorrect_-1_createdAt_1",
-         [("postId", ASCENDING), ("isCorrect", DESCENDING), ("createdAt", ASCENDING)], False),
+        ("postId_1_isCorrect_-1_createdAt_1__id_1",
+         [("postId", ASCENDING), ("isCorrect", DESCENDING), ("createdAt", ASCENDING), ("_id", ASCENDING)], False),
         ("author.userId_1_postId_1", [("author.userId", ASCENDING), ("postId", ASCENDING)], False),
     ],
 
